@@ -1,0 +1,89 @@
+diff --git a/node_modules/egg/index.d.ts b/node_modules/egg/index.d.ts
+index 942ab89..643d81a 100644
+--- a/node_modules/egg/index.d.ts
++++ b/node_modules/egg/index.d.ts
+@@ -41,8 +41,53 @@ import 'egg-static';
+ import 'egg-jsonp';
+ import 'egg-view';
+ 
++type DecoratorFunction = (target: Object, propertyKey: string | symbol, descriptor: any) => any | void;
++type DecoratorFactory = (...args: any[]) => DecoratorFunction;
++
+ declare module 'egg' {
+   export type EggLogger = Logger;
++  export const Decorator = {
++    Get: (...args): DecoratorFactory => (...args) => void 0,
++    Post: (...args): DecoratorFactory => (...args) => void 0,
++    Put: (...args): DecoratorFactory => (...args) => void 0,
++    Delete: (...args): DecoratorFactory => (...args) => void 0,
++    Patch: (...args): DecoratorFactory => (...args) => void 0,
++    Options: (...args): DecoratorFactory => (...args) => void 0,
++    Head: (...args): DecoratorFactory => (...args) => void 0,
++    All: (...args): DecoratorFactory => (...args) => void 0,
++    Api: (...args): DecoratorFactory => (...args) => void 0,
++    Middleware: (...args): DecoratorFactory => (...args) => void 0,
++    Prefix: (...args): DecoratorFactory => (...args) => void 0,
++    Apis: (...args): DecoratorFactory => (...args) => void 0,
++    Parameters: (...args): DecoratorFactory => (...args) => void 0,
++    Responses: (...args): DecoratorFactory => (...args) => void 0,
++    Response: (...args): DecoratorFactory => (...args) => void 0,
++    Schemas: (...args): DecoratorFactory => (...args) => void 0,
++    Cacheable: (...args): DecoratorFactory => (...args) => void 0,
++    CachePut: (...args): DecoratorFactory => (...args) => void 0,
++    CacheEvict: (...args): DecoratorFactory => (...args) => void 0,
++    RateLimiter: (...args): DecoratorFactory => (...args) => void 0,
++    Logger: (...args): DecoratorFactory => (...args) => void 0,
++    Sync: (...args): DecoratorFactory => (...args) => void 0,
++    Transactional: (...args): DecoratorFactory => (...args) => void 0,
++    Background: (...args): DecoratorFactory => (...args) => void 0,
++    Subscribe: (...args): DecoratorFactory => (...args) => void 0,
++    Publish: (...args): DecoratorFactory => (...args) => void 0,
++  }
++
++  export const Workflow = {
++    WorkflowApprover: (...args): DecoratorFactory => (...args) => void 0,
++    WorkflowCondition: (...args): DecoratorFactory => (...args) => void 0,
++    WorkflowListener: (...args): DecoratorFactory => (...args) => void 0,
++  }
++
++  export const Swagger = {
++    SchemaWrapper: (...args) => Object,
++    ArrayWrapper: (...args) => Object,
++    ObjectWrapper: (...args) => Object,
++    PageWrapper: (...args) => Object,
++  }
++
+   // plain object
+   type PlainObject<T = any> = { [key: string]: T };
+ 
+@@ -640,6 +685,9 @@ declare module 'egg' {
+     Subscription: typeof Subscription;
+     Controller: typeof Controller;
+     Service: typeof Service;
++    Decorator: Decorator;
++    Workflow: Workflow;
++    Swagger: Swagger;
+   }
+ 
+   // compatible
+diff --git a/node_modules/egg/lib/egg.js b/node_modules/egg/lib/egg.js
+index a33b451..14606c3 100644
+--- a/node_modules/egg/lib/egg.js
++++ b/node_modules/egg/lib/egg.js
+@@ -3,7 +3,6 @@ const path = require('path');
+ const fs = require('fs');
+ const ms = require('ms');
+ const http = require('http');
+-const inspector = require('inspector');
+ const EggCore = require('egg-core').EggCore;
+ const cluster = require('cluster-client');
+ const extend = require('extend2');
+@@ -115,7 +114,7 @@ class EggApplication extends EggCore {
+         isLeader: this.type === 'agent',
+         logger: this.coreLogger,
+         // debug mode does not check heartbeat
+-        isCheckHeartbeat: inspector.url() === undefined,
++        isCheckHeartbeat: process.env.EGG_DEBUG !== 'true',
+       });
+       const client = cluster(clientClass, options);
+       this._patchClusterClient(client);

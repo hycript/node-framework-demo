@@ -3,19 +3,31 @@
   "version": "1.0.0",
   "description": "",
   "dependencies": {
-    "egg": "^2"
+    "egg": "3.12.0",
+    "egg-cors": "^2.2.3",
+    "egg-redis": "^2.4.0",
+    "egg-scripts": "^2.17.0",
+    "egg-security": "^2.11.0",
+    "egg-view-nunjucks": "^2.3.0",
+    "fs-extra": "^11.1.0"
   },
   "devDependencies": {
-    "autod": "^3",
-    "autod-egg": "^1",
-    "egg-bin": "^4",
-    "egg-ci": "^1",
-    "egg-mock": "^4",
-    "eslint": "^7",
-    "eslint-config-egg": "^8.0.0"
+    "@babel/core": "^7.21.0",
+    "@babel/eslint-parser": "^7.19.1",
+    "@babel/plugin-proposal-class-properties": "^7.18.6",
+    "@babel/plugin-proposal-decorators": "^7.21.0",
+    "@babel/register": "^7.21.0",
+    "babel-eslint": "^10.1.0",
+    "babel-register": "^6.26.0",
+    "egg-bin": "^5",
+    "egg-ci": "^2",
+    "egg-mock": "^5",
+    "eslint": "^8",
+    "eslint-config-egg": "^12",
+    "patch-package": "^6.5.1"
   },
   "engines": {
-    "node": ">=12.0.0"
+    "node": ">=14.0.0"
   },
   "scripts": {
     "test": "npm run lint -- --fix && egg-bin pkgfiles && npm run test-local",
@@ -35,17 +47,19 @@
     "url": ""
   },
   "keywords": [
-    "egg", "egg-framework"
+    "egg",
+    "egg-framework"
   ],
   "author": "",
   "files": [
-    "app",
-    "config",
+    "index.js",
     "lib",
-    "app.js",
-    "agent.js",
-    "index.js"
+    "app",
+    "config"
   ],
-  "eslintIgnore": [ "coverage", "dist" ],
+  "eslintIgnore": [
+    "coverage",
+    "dist"
+  ],
   "license": "MIT"
 }
