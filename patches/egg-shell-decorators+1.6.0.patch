@@ -1,0 +1,328 @@
+diff --git a/node_modules/egg-shell-decorators/index.js b/node_modules/egg-shell-decorators/index.js
+index 21e5422..7c9d3c9 100644
+--- a/node_modules/egg-shell-decorators/index.js
++++ b/node_modules/egg-shell-decorators/index.js
+@@ -8,13 +8,23 @@ const MethodHandler = require('./src/handler/method-handler');
+ const ctMap = new Map();
+ const ctHandler = new ControllerHandler();
+ const methodHandler = new MethodHandler(ctMap);
++const hooks = {
++  start: [],
++  process: [],
++  finish: [],
++};
+ 
+-const EggShell = app => {
++const EggShell = (app, { prefix: globalPrefix = '', before = [], after = [], plugins = [] } = {}) => {
+   const { router } = app;
+ 
++  hooks.start.length && hooks.start.forEach(function (hook) {
++    hook({ classMap: ctMap, classHandler: ctHandler, methodHandler })
++  })
++
+   for (const c of ctMap.values()) {
+     // 解析控制器元数据
+-    let { prefix } = ctHandler.getMetada(c.constructor);
++    const classMetadata = ctHandler.getMetada(c.constructor);
++    let { prefix } = classMetadata;
+     const propertyNames = _.filter(Object.getOwnPropertyNames(c), pName => {
+       return pName !== 'constructor' && pName !== 'pathName' && pName !== 'fullPath';
+     });
+@@ -25,26 +35,46 @@ const EggShell = app => {
+       replace(/[\/]{2,9}/g, '/').
+       replace(/(\.ts)|(\.js)/g, '');
+     const rootPath = 'controller/';
+-    prefix = prefix || fullPath.substring(fullPath.indexOf(rootPath) + rootPath.length);
++    const realPath = fullPath.substring(fullPath.indexOf(rootPath) + rootPath.length);
++    const controllerLocation = realPath.split('/').join('.');
++    prefix = prefix || realPath;
+     prefix = prefix.startsWith('/') ? prefix : '/' + prefix;
+ 
+     for (const pName of propertyNames) {
+       // 解析函数元数据
+-      const { reqMethod, path, middlewares } = methodHandler.getMetada(c[pName]);
+-
+-      const routerCb = async ctx => {
+-        const instance = new c.constructor(ctx);
+-        try {
+-          await instance[pName](ctx);
+-        } catch (error) {
+-          throw error;
+-        }
+-      };
+-      router[reqMethod](prefix + path, ...middlewares, routerCb);
++      const methodMetadata = methodHandler.getMetada(c, pName);
++      const { path, middlewares } = methodMetadata;
++      let { reqMethod } = methodMetadata;
++
++      if (_.isNil(reqMethod)) continue;
++
++      if (!Array.isArray(reqMethod)) {
++        reqMethod = [reqMethod];
++      }
++
++      const realPath = `${globalPrefix}${prefix}${path}`;
++      const controllerMethod = `${controllerLocation}.${pName}`;
++
++      reqMethod.forEach(function (method) {
++        router[method](realPath, ...before, ...middlewares, ...after, controllerMethod);
++      });
++
++      hooks.process.length && hooks.process.forEach(function (hook) {
++        hook({ path: realPath, classMetadata, methodMetadata, controllerMethod, key: pName, method: reqMethod, target: c })
++      });
+     }
+   }
++
++  hooks.finish.length && hooks.finish.forEach(function (hook) {
++    hook({ classMap: ctMap, classHandler: ctHandler, methodHandler })
++  })
+ };
+ 
++EggShell.addHook = function (event, hook) {
++  if (typeof hook !== 'function' || !hooks[event]) return;
++  hooks[event].push(hook);
++}
++
+ module.exports = {
+   EggShell,
+ 
+@@ -56,7 +86,9 @@ module.exports = {
+   Patch: methodHandler.patch(),
+   Options: methodHandler.options(),
+   Head: methodHandler.head(),
++  Api: methodHandler.api(),
+   Middleware: methodHandler.middleware(),
+ 
++  Apis: ctHandler.apis(),
+   Prefix: ctHandler.prefix()
+ };
+diff --git a/node_modules/egg-shell-decorators/src/constants.js b/node_modules/egg-shell-decorators/src/constants.js
+index 6bee994..660d608 100644
+--- a/node_modules/egg-shell-decorators/src/constants.js
++++ b/node_modules/egg-shell-decorators/src/constants.js
+@@ -4,6 +4,6 @@ module.exports = {
+   PATH_METADATA: 'path',
+   METHOD_METADATA: 'method',
+   MIDDLEWARE_METADATA: 'middleware',
+-
++  ADDONS_METADATA: 'addons',
+   CONTROLLER_PREFIX_METADATA: 'controller_prefix'
+ };
+diff --git a/node_modules/egg-shell-decorators/src/handler/controller-handler.js b/node_modules/egg-shell-decorators/src/handler/controller-handler.js
+index 1e4e188..32bae34 100644
+--- a/node_modules/egg-shell-decorators/src/handler/controller-handler.js
++++ b/node_modules/egg-shell-decorators/src/handler/controller-handler.js
+@@ -4,12 +4,17 @@ require('reflect-metadata');
+ 
+ const {
+   CONTROLLER_PREFIX_METADATA,
+-  CONTROLLER_RENDER_METADATA
++  ADDONS_METADATA
+ } = require('../constants');
+ 
+ const createArrayDecorator = Symbol('createArrayDecorator');
+ const createSingleDecorator = Symbol('createSingleDecorator');
+ const createCoupleDecorator = Symbol('createCoupleDecorator');
++const createControllerDecorator = Symbol('createControllerDecorator');
++
++const is = function (obj, type) {
++  return Object.prototype.toString.call(obj).slice(8, -1).toLowerCase() === type;
++}
+ 
+ class ControllerHandler {
+ 
+@@ -17,15 +22,33 @@ class ControllerHandler {
+     return this[createSingleDecorator](CONTROLLER_PREFIX_METADATA);
+   }
+ 
++  apis() {
++    return this[createControllerDecorator]();
++  }
++
+   getMetada(target) {
+     const prefix = Reflect.getMetadata(CONTROLLER_PREFIX_METADATA, target);
+-    const renderController = Reflect.getMetadata(CONTROLLER_RENDER_METADATA, target);
++    const addons = Reflect.getMetadata(ADDONS_METADATA, target) || {};
+     return {
+       prefix,
+-      renderController
++      addons
+     };
+   }
+ 
++  [createControllerDecorator]() {
++    return (prefix, addons) => {
++      if (is(prefix, 'object')) {
++        addons = prefix;
++        prefix = undefined;
++      }
++
++      return (target, key, descriptor) => {
++        Reflect.defineMetadata(CONTROLLER_PREFIX_METADATA, prefix, target);
++        Reflect.defineMetadata(ADDONS_METADATA, addons, target);
++      }
++    }
++  }
++
+   [createSingleDecorator](metadata) {
+     return value => {
+       return (target, key, descriptor) => {
+diff --git a/node_modules/egg-shell-decorators/src/handler/method-handler.js b/node_modules/egg-shell-decorators/src/handler/method-handler.js
+index 02a5da8..e70a465 100644
+--- a/node_modules/egg-shell-decorators/src/handler/method-handler.js
++++ b/node_modules/egg-shell-decorators/src/handler/method-handler.js
+@@ -1,8 +1,10 @@
+ 'use strict';
+ 
++const { add } = require('lodash');
+ const {
+   MIDDLEWARE_METADATA,
+   METHOD_METADATA,
++  ADDONS_METADATA,
+   PATH_METADATA } = require('../constants');
+ const RequestMethod = require('../enum/request-method');
+ 
+@@ -11,96 +13,115 @@ const createSingleDecorator = Symbol('createSingleDecorator');
+ const createArrayDecorator = Symbol('createArrayDecorator');
+ const mappingRequest = Symbol('mappingRequest');
+ 
++const is = function (obj, type) {
++  return Object.prototype.toString.call(obj).slice(8, -1).toLowerCase() === type;
++}
++
+ class MethodHandler {
+-  constructor (cMap) {
++  constructor(cMap) {
+     this.cMap = cMap;
+   }
+ 
+-  getMetada (targetCb) {
+-    const middlewares = Reflect.getMetadata(MIDDLEWARE_METADATA, targetCb) || [];
+-    const reqMethod = Reflect.getMetadata(METHOD_METADATA, targetCb);
+-    const path = Reflect.getMetadata(PATH_METADATA, targetCb);
++  getMetada(target, key) {
++    const middlewares = Reflect.getMetadata(MIDDLEWARE_METADATA, target, key) || [];
++    const reqMethod = Reflect.getMetadata(METHOD_METADATA, target, key);
++    const path = Reflect.getMetadata(PATH_METADATA, target, key);
++    const addons = Reflect.getMetadata(ADDONS_METADATA, target, key) || {};
+     return {
+       middlewares,
+       reqMethod,
+-      path
++      path,
++      addons
+     };
+   }
+ 
+-  middleware () {
++  middleware() {
+     return this[createArrayDecorator](MIDDLEWARE_METADATA);
+   }
+ 
+-  get () {
++  get() {
+     return this[createMappingDecorator](RequestMethod.GET);
+   }
+ 
+-  post () {
++  post() {
+     return this[createMappingDecorator](RequestMethod.POST);
+   }
+ 
+-  put () {
++  put() {
+     return this[createMappingDecorator](RequestMethod.PUT);
+   }
+ 
+-  delete () {
++  delete() {
+     return this[createMappingDecorator](RequestMethod.DELETE);
+   }
+ 
+-  patch () {
++  patch() {
+     return this[createMappingDecorator](RequestMethod.PATCH);
+   }
+ 
+-  options () {
++  options() {
+     return this[createMappingDecorator](RequestMethod.OPTIONS);
+   }
+ 
+-  head () {
++  head() {
+     return this[createMappingDecorator](RequestMethod.HEAD);
+   }
+ 
+-  all () {
++  all() {
+     return this[createMappingDecorator](RequestMethod.ALL);
+   }
+ 
+-  [createMappingDecorator] (method) {
+-    return path => {
++  api() {
++    return this[createMappingDecorator]();
++  }
++
++  [createMappingDecorator](method) {
++    return (path, methods, addons) => {
++      if (is(methods, 'object')) {
++        addons = methods;
++        methods = method;
++      }
++      methods = methods || ['post'];
++
+       return this[mappingRequest]({
+         [PATH_METADATA]: path,
+-        [METHOD_METADATA]: method,
++        [METHOD_METADATA]: method || methods,
++        [ADDONS_METADATA]: addons || {},
+       });
+     };
+   }
+ 
+-  [mappingRequest] (metadata) {
++  [mappingRequest](metadata) {
+     const path = metadata[PATH_METADATA];
+     const reqMethod = metadata[METHOD_METADATA];
++    const addons = metadata[ADDONS_METADATA];
+ 
+     return (target, key, descriptor) => {
+       this.cMap.set(target, target);
+-      Reflect.defineMetadata(PATH_METADATA, path, descriptor.value);
+-      Reflect.defineMetadata(METHOD_METADATA, reqMethod, descriptor.value);
++      Reflect.defineMetadata(PATH_METADATA, path, target, key);
++      Reflect.defineMetadata(METHOD_METADATA, reqMethod, target, key);
++      Reflect.defineMetadata(ADDONS_METADATA, addons, target, key);
+       return descriptor;
+     };
+   }
+ 
+-  [createSingleDecorator] (metadata) {
++  [createSingleDecorator](metadata) {
+     return value => {
+       return (target, key, descriptor) => {
+         this.cMap.set(target, target);
+-        Reflect.defineMetadata(metadata, value, descriptor.value);
++        Reflect.defineMetadata(metadata, value, target, key);
+         return descriptor;
+       };
+     };
+   }
+ 
+-  [createArrayDecorator] (metadata) {
++  [createArrayDecorator](metadata) {
+     return values => {
+       return (target, key, descriptor) => {
+-        const _values = Reflect.getOwnMetadata(metadata, descriptor.value) || [];
+-        values = (values instanceof Array) ? values : [ values ];
++        const _values = Reflect.getOwnMetadata(metadata, target, key) || [];
++        values = (values instanceof Array) ? values : [values];
+         values = values.concat(_values);
+-        Reflect.defineMetadata(metadata, values, descriptor.value);
++        Reflect.defineMetadata(metadata, values, target, key);
+         return descriptor;
+       };
+     };
