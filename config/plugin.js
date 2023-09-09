@@ -1,8 +1,10 @@
 'use strict';
 
-// add you build-in plugin here, example:
-// exports.nunjucks = {
-//   enable: true,
-//   package: 'egg-view-nunjucks',
-// };
+const path = require('path');
 
+module.exports = {
+  decorator: {
+    enable: true,
+    package: path.resolve('app/plugin/decorator'),
+  },
+};
