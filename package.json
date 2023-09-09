@@ -36,7 +36,8 @@
     "lint": "eslint . --resolve-plugins-relative-to .",
     "ci": "npm run lint && egg-bin pkgfiles --check && npm run cov",
     "autod": "autod",
-    "pkgfiles": "egg-bin pkgfiles"
+    "pkgfiles": "egg-bin pkgfiles",
+    "postinstall": "patch-package"
   },
   "ci": {
     "version": "12",
